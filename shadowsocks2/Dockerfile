@@ -7,6 +7,11 @@ RUN apk upgrade \
     && apk add git \
     && go get github.com/shadowsocks/go-shadowsocks2
 
+git clone https://github.com/shadowsocks/simple-obfs.git /tmp/simple-obfs && \
+    cd /tmp/simple-obfs && git submodule update --init --recursive && ./autogen.sh && \
+    ./configure && make -j4 && make install && \
+    rm -rf /tmp/shadowsocks-libev /tmp/simple-obfs
+
 FROM alpine:3.10 AS dist
 
 LABEL maintainer="mritd <mritd@linux.com>"
