@@ -8,11 +8,6 @@ RUN apk upgrade \
     && apk add git \
     && go get github.com/shadowsocks/go-shadowsocks2
 
-git clone https://github.com/shadowsocks/simple-obfs.git /tmp/simple-obfs && \
-    cd /tmp/simple-obfs && git submodule update --init --recursive && ./autogen.sh && \
-    ./configure && make -j4 && make install && \
-    rm -rf /tmp/shadowsocks-libev /tmp/simple-obfs
-
 FROM alpine:3.10 AS dist
 
 LABEL maintainer="mritd <mritd@linux.com>"
@@ -20,12 +15,45 @@ LABEL maintainer="mritd <mritd@linux.com>"
 ARG TZ="Asia/Shanghai"
 
 ENV TZ ${TZ}
+ENV OBFS_DOWNLOAD_URL https://github.com/shadowsocks/simple-obfs.git
 
 RUN apk upgrade --update \
     && apk add tzdata \
     && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/cache/apk/* \
+    && apk add --virtual .build-deps \
+        asciidoc \
+        autoconf \
+        automake \
+        g++ \
+        gcc \
+        libev-dev \
+        libpcre32 \
+        libtool \
+        linux-headers \
+        make \
+        openssl \
+        xmlto \
+        zlib-dev \
+        git \
+    && git clone ${OBFS_DOWNLOAD_URL} \
+    && (cd simple-obfs \
+    && git submodule update --init --recursive \
+    && ./autogen.sh && ./configure --disable-documentation\
+    && make && make install) \
+    && ln -sf /usr/share/zoneinfo/${TZ} /etc/localtime \
+    && echo $TZ > /etc/timezone \
+    && runDeps="$( \
+        scanelf --needed --nobanner /usr/local/bin/obfs-* \
+            | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+            | xargs -r apk info --installed \
+            | sort -u \
+        )" \
+    && apk add --virtual .run-deps $runDeps \
+    && apk del .build-deps \
+    && rm -rf simple-obfs \
+        /var/cache/apk/*
 
 COPY --from=builder /go/bin/go-shadowsocks2 /usr/bin/shadowsocks
 COPY entrypoint.sh /entrypoint.sh
